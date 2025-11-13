@@ -50,24 +50,11 @@ func CheckUserLottery(c *gin.Context) {
 	}
 	userID, _ := primitive.ObjectIDFromHex(userIDStr.(string))
 
-	now := time.Now()
-	var round string
-	day := now.Day()
-	hour := now.Hour()
-	if (day == 1 || day == 16) && hour >= 17 {
-		round = fmt.Sprintf("%d/%d/%d", day, now.Month(), now.Year()+543)
-	} else {
-		if day > 16 {
-			round = fmt.Sprintf("16/%d/%d", now.Month(), now.Year()+543)
-		} else if day > 1 {
-			round = fmt.Sprintf("1/%d/%d", now.Month(), now.Year()+543)
-		} else {
-			lastMonth := now.AddDate(0, -1, 0)
-			round = fmt.Sprintf("16/%d/%d", lastMonth.Month(), lastMonth.Year()+543)
-		}
+	filter := bson.M{
+		"user_id": userID,
+		"status":  "ยังไม่ตรวจสอบ",
 	}
 
-	filter := bson.M{"user_id": userID, "round": round}
 	cursor, err := getLotteryCollection__().Find(context.Background(), filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cannot get lotteries"})
@@ -97,6 +84,7 @@ func CheckUserLottery(c *gin.Context) {
 	for i, l := range lotteries {
 		status := "ไม่ถูกรางวัล"
 
+		// Check grand prizes
 		for _, prize := range apiResult.Response.Prizes {
 			for _, n := range prize.Number {
 				if l.Number == n {
@@ -105,15 +93,24 @@ func CheckUserLottery(c *gin.Context) {
 			}
 		}
 
+		// Check running numbers
 		for _, running := range apiResult.Response.RunningNumbers {
 			for _, n := range running.Number {
-				if running.ID == "runningNumberBackTwo" && len(l.Number) >= 2 && l.Number[len(l.Number)-2:] == n {
+
+				// 2 ตัวท้าย
+				if running.ID == "runningNumberBackTwo" && len(l.Number) >= 2 &&
+					l.Number[len(l.Number)-2:] == n {
 					status = fmt.Sprintf("ถูกรางวัล %s", running.Name)
 				}
-				if (running.ID == "runningNumberBackThree" || running.ID == "runningNumberFrontThree") && len(l.Number) >= 3 {
+
+				// 3 ตัวหน้า/ท้าย
+				if (running.ID == "runningNumberBackThree" || running.ID == "runningNumberFrontThree") &&
+					len(l.Number) >= 3 {
+
 					if running.ID == "runningNumberBackThree" && l.Number[len(l.Number)-3:] == n {
 						status = fmt.Sprintf("ถูกรางวัล %s", running.Name)
 					}
+
 					if running.ID == "runningNumberFrontThree" && l.Number[:3] == n {
 						status = fmt.Sprintf("ถูกรางวัล %s", running.Name)
 					}
@@ -123,9 +120,15 @@ func CheckUserLottery(c *gin.Context) {
 
 		lotteries[i].Status = status
 		lotteries[i].UpdatedAt = time.Now()
-		_, _ = getLotteryCollection__().UpdateOne(context.Background(),
+
+		_, _ = getLotteryCollection__().UpdateOne(
+			context.Background(),
 			bson.M{"_id": l.ID},
-			bson.M{"$set": bson.M{"status": status, "updated_at": time.Now()}})
+			bson.M{"$set": bson.M{
+				"status":     status,
+				"updated_at": time.Now(),
+			}},
+		)
 	}
 
 	c.JSON(http.StatusOK, lotteries)

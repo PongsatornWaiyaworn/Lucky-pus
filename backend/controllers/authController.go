@@ -58,10 +58,27 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	filter := bson.M{
+		"$or": []bson.M{
+			{"username": user.Username},
+			{"email": user.Email},
+		},
+	}
+
+	var existingUser models.User
+	err := getUserCollection().FindOne(context.Background(), filter).Decode(&existingUser)
+	if err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ชื่อผู้ใช้ถูกใช้งานแล้ว"})
+		return
+	} else if err != mongo.ErrNoDocuments {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการตรวจสอบผู้ใช้"})
+		return
+	}
+
 	hash, _ := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	user.Password = string(hash)
 
-	_, err := getUserCollection().InsertOne(context.Background(), user)
+	_, err = getUserCollection().InsertOne(context.Background(), user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างบัญชีผู้ใช้ได้"})
 		return
