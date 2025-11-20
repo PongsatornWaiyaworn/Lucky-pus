@@ -13,6 +13,7 @@ type Lottery struct {
 	Number    string             `bson:"number" json:"number"`
 	Quantity  int                `bson:"quantity" json:"quantity"`
 	Status    string             `bson:"status" json:"status"` // "ยังไม่ตรวจสอบ", "ถูกรางวัลที่ ....", "ไม่ถูกรางวัล"
+	ImageURL  string             `bson:"image_url,omitempty" json:"image_url,omitempty"`
 	UpdatedAt time.Time          `bson:"updated_at,omitempty" json:"updated_at,omitempty"`
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }

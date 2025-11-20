@@ -87,7 +87,7 @@ struct LotteryView: View {
                     }
                     
                     Button(action: checkLatestLottery) {
-                        Text("ตรวจงวดล่าสุด")
+                        Text("ตรวจหวย")
                             .bold()
                             .frame(maxWidth: .infinity)
                             .padding()

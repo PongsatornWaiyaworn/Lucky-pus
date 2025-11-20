@@ -27,5 +27,7 @@ func SetupRoutes(router *gin.Engine) {
 		lottery.GET("/check", controllers.CheckUserLottery)
 		lottery.GET("/analyze", controllers.AnalyzeUserLottery)
 		lottery.GET("/predict", controllers.PredictNextLottery)
+		lottery.POST("/upload-image", controllers.UploadLotteryImage)
+		lottery.DELETE("/delete-image/:id", controllers.DeleteLotteryImage)
 	}
 }

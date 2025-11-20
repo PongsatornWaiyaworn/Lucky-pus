@@ -1,10 +1,18 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -16,6 +24,145 @@ import (
 
 func getLotteryCollection() *mongo.Collection {
 	return config.Client.Database("luckyPus").Collection("lotteries")
+}
+
+var s3Client *s3.Client
+
+func InitS3(client *s3.Client) {
+	s3Client = client
+}
+
+func UploadLotteryImage(c *gin.Context) {
+	lotteryID := c.PostForm("lottery_id")
+	if lotteryID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lottery_id is required"})
+		return
+	}
+
+	fileHeader, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot open file"})
+		return
+	}
+	defer file.Close()
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read file"})
+		return
+	}
+
+	s3Key := fmt.Sprintf("lottery/%s-%d.jpg", lotteryID, time.Now().Unix())
+
+	_, err = config.S3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket:      aws.String(config.S3Bucket),
+		Key:         aws.String(s3Key),
+		Body:        bytes.NewReader(fileBytes),
+		ContentType: aws.String(fileHeader.Header.Get("Content-Type")),
+		ACL:         types.ObjectCannedACLPublicRead,
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload to S3", "detail": err.Error()})
+		return
+	}
+
+	imageURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s",
+		config.S3Bucket,
+		os.Getenv("AWS_REGION"),
+		s3Key,
+	)
+
+	collection := getLotteryCollection()
+	objID, _ := primitive.ObjectIDFromHex(lotteryID)
+
+	userID, _ := c.Get("user_id")
+	uid, _ := primitive.ObjectIDFromHex(userID.(string))
+
+	update := bson.M{
+		"$set": bson.M{
+			"image_url":  imageURL,
+			"updated_at": time.Now(),
+		},
+	}
+
+	_, err = collection.UpdateOne(context.Background(),
+		bson.M{"_id": objID, "user_id": uid},
+		update,
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update lottery"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "image uploaded successfully",
+		"image_url": imageURL,
+	})
+}
+
+func DeleteLotteryImage(c *gin.Context) {
+	id := c.Param("id")
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid lottery ID"})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	uid, _ := primitive.ObjectIDFromHex(userID.(string))
+
+	collection := getLotteryCollection()
+
+	var lot models.Lottery
+	err = collection.FindOne(context.Background(),
+		bson.M{"_id": objID, "user_id": uid},
+	).Decode(&lot)
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Lottery not found"})
+		return
+	}
+
+	if lot.ImageURL != "" {
+		s3Key := extractKeyFromURL(lot.ImageURL)
+
+		_, _ = config.S3Client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+			Bucket: aws.String(config.S3Bucket),
+			Key:    aws.String(s3Key),
+		})
+	}
+
+	update := bson.M{
+		"$unset": bson.M{"image_url": ""},
+		"$set":   bson.M{"updated_at": time.Now()},
+	}
+
+	_, err = collection.UpdateOne(context.Background(),
+		bson.M{"_id": objID, "user_id": uid},
+		update)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete image"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Image deleted successfully"})
+}
+
+func extractKeyFromURL(url string) string {
+	parts := strings.Split(url, ".amazonaws.com/")
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return ""
 }
 
 func CreateLottery(c *gin.Context) {

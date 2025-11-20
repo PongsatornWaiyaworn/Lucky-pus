@@ -16,6 +16,7 @@ import (
 func main() {
 	config.LoadEnv()
 	config.ConnectDB()
+	config.LoadS3()
 
 	gin.SetMode(gin.ReleaseMode)
 
