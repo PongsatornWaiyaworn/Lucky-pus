@@ -28,6 +28,12 @@ func getLotteryCollection() *mongo.Collection {
 
 var s3Client *s3.Client
 
+func init() {
+	config.LoadEnv()
+	config.ConnectDB()
+	config.LoadS3()
+}
+
 func InitS3(client *s3.Client) {
 	s3Client = client
 }
