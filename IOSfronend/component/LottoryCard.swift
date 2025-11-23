@@ -1,13 +1,18 @@
 import SwiftUI
+import PhotosUI
+
+let BASE_URL = "https://locky-pus-api.onrender.com"
 
 struct LotteryCardView: View {
     var lottery: Lottery
     var rounds: [String]
     var onEdit: (Lottery) -> Void
     var onDelete: (Lottery) -> Void
+    var onOpenEvidence: (Lottery) -> Void   
     
     var body: some View {
         VStack(alignment: .center, spacing: 10) {
+            
             Text(lottery.number)
                 .font(.system(size: 32, weight: .bold, design: .monospaced))
                 .foregroundStyle(
@@ -15,25 +20,30 @@ struct LotteryCardView: View {
                                    startPoint: .leading,
                                    endPoint: .trailing)
                 )
-                .padding(.vertical, 5)
             
             Text("งวด: \(lottery.round)")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.95))
+                .font(.subheadline).foregroundColor(.white.opacity(0.9))
             
             Text("จำนวน: \(lottery.quantity)")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.9))
+                .font(.subheadline).foregroundColor(.white.opacity(0.9))
             
             Text("สถานะ: \(lottery.status)")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.9))
+                .font(.subheadline).foregroundColor(.white.opacity(0.9))
+            
+            Button(lottery.image_url == nil ? "เพิ่มหลักฐาน" : "ดูหลักฐาน") {
+                onOpenEvidence(lottery)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(😎
+            .background(Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(10)
             
             HStack(spacing: 15) {
                 if lottery.status == "ยังไม่ตรวจสอบ" && rounds.contains(lottery.round) {
                     Button("แก้ไข") { onEdit(lottery) }
                         .frame(maxWidth: .infinity)
-                        .padding(8)
+                        .padding(😎
                         .background(Color.orange)
                         .foregroundColor(.white)
                         .cornerRadius(10)
@@ -41,13 +51,12 @@ struct LotteryCardView: View {
                 
                 Button("ลบ") { onDelete(lottery) }
                     .frame(maxWidth: .infinity)
-                    .padding(8)
+                    .padding(😎
                     .background(Color.red)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
         }
-        .frame(maxWidth: .infinity)
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 15)
@@ -61,32 +70,19 @@ struct LotteryCardView: View {
         if lottery.status.hasPrefix("ถูกรางวัล") {
             return LinearGradient(
                 gradient: Gradient(colors: [
-                    Color(red: 34/255, green: 139/255, blue: 34/255),
-                    Color(red: 50/255, green: 205/255, blue: 50/255),
-                    Color(red: 144/255, green: 238/255, blue: 144/255)
+                    .green, .green.opacity(0.7), .green.opacity(0.3)
                 ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                startPoint: .topLeading, endPoint: .bottomTrailing
             )
         } else if lottery.status.hasPrefix("ไม่ถูกรางวัล") {
             return LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 105/255, green: 105/255, blue: 105/255),
-                    Color(red: 169/255, green: 169/255, blue: 169/255),
-                    Color(red: 211/255, green: 211/255, blue: 211/255)
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
+                colors: [.gray, .gray.opacity(0.6), .gray.opacity(0.3)],
+                startPoint: .top, endPoint: .bottom
             )
         } else {
             return LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 72/255, green: 61/255, blue: 139/255),
-                    Color(red: 123/255, green: 104/255, blue: 238/255),
-                    Color(red: 147/255, green: 112/255, blue: 219/255)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [.purple, .purple.opacity(0.7), .purple.opacity(0.3)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
             )
         }
     }

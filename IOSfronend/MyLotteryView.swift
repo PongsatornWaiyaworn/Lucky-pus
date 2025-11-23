@@ -5,10 +5,11 @@ struct Lottery: Identifiable, Codable {
     let user_id: String
     var round: String
     var number: String
-    var status: String
     var quantity: Int
-    let updated_at: String
-    let created_at: String
+    var status: String
+    var image_url: String?
+    var created_at: String
+    var updated_at: String
 }
 
 struct LotteryView: View {
@@ -19,6 +20,9 @@ struct LotteryView: View {
     
     @State private var lotteryToDelete: Lottery? = nil
     @State private var showDeleteAlert = false
+    
+    @State private var selectedLotteryForEvidence: Lottery? = nil
+    @State private var showEvidenceSheet = false
     
     let BASE_URL = Bundle.main.infoDictionary?["BASE_URL"] as? String
     
@@ -35,6 +39,7 @@ struct LotteryView: View {
         var nextMonth = month
         var nextYear = year
         let nextDay: Int
+        
         if day >= 16 {
             nextDay = 1
             nextMonth += 1
@@ -45,8 +50,8 @@ struct LotteryView: View {
         } else {
             nextDay = 16
         }
-        let nextRound = String(format: "%02d/%02d/%d", nextDay, nextMonth, nextYear)
         
+        let nextRound = String(format: "%02d/%02d/%d", nextDay, nextMonth, nextYear)
         return [lastRound, nextRound]
     }
     
@@ -54,7 +59,25 @@ struct LotteryView: View {
         NavigationStack {
             VStack(spacing: 20) {
                 Picker("เลือกงวด", selection: $selectedRound) {
-                    ForEach(uniqueRounds(), id: \.self) { round in
+                    ForEach(uniqueRounds().sorted { lhs, rhs in
+                        
+                        let fmt = DateFormatter()
+                        fmt.dateFormat = "dd/MM/yyyy"
+                        fmt.locale = Locale(identifier: "th_TH")
+                        
+                        func convertToAD(_ dateString: String) -> String {
+                            let parts = dateString.split(separator: "/").map { String($0) }
+                            if parts.count == 3, let buddhistYear = Int(parts[2]) {
+                                return "\(parts[0])/\(parts[1])/\(buddhistYear - 543)"
+                            }
+                            return dateString
+                        }
+                        
+                        let dateLHS = fmt.date(from: convertToAD(lhs)) ?? Date.distantPast
+                        let dateRHS = fmt.date(from: convertToAD(rhs)) ?? Date.distantPast
+                        
+                        return dateLHS > dateRHS
+                    }, id: \.self) { round in
                         Text(round).tag(round)
                     }
                 }
@@ -68,12 +91,16 @@ struct LotteryView: View {
                                 lottery: lottery,
                                 rounds: rounds,
                                 onEdit: { showEditLottery = $0 },
-                                onDelete: confirmDeleteLottery
+                                onDelete: confirmDeleteLottery,
+                                onOpenEvidence: { lot in
+                                    selectedLotteryForEvidence = lot
+                                    showEvidenceSheet = true
+                                }
                             )
                         }
                     }
-                    .padding(.vertical)
                 }
+                .padding(.vertical)
                 
                 HStack(spacing: 15) {
                     NavigationLink(destination: AddLotteryView(onSave: fetchLotteries)) {
@@ -87,7 +114,7 @@ struct LotteryView: View {
                     }
                     
                     Button(action: checkLatestLottery) {
-                        Text("ตรวจหวย")
+                        Text("ตรวจสอบ")
                             .bold()
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -101,18 +128,22 @@ struct LotteryView: View {
                 Spacer()
             }
             .navigationTitle("หวยของฉัน")
-            .background(LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 250/255, green: 250/255, blue: 255/255), 
-                    Color(red: 240/255, green: 230/255, blue: 255/255)  
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ))
             .navigationBarTitleDisplayMode(.inline)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 250/255, green: 250/255, blue: 255/255),
+                        Color(red: 240/255, green: 230/255, blue: 255/255)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .onAppear(perform: fetchLotteries)
             .alert(isPresented: $showCongrats) {
-                Alert(title: Text("🎉 ยินดีด้วย!"), message: Text("คุณถูกรางวัล"), dismissButton: .default(Text("OK")))
+                Alert(title: Text("🎉 ยินดีด้วย!"),
+                      message: Text("คุณถูกรางวัล"),
+                      dismissButton: .default(Text("OK")))
             }
             .alert(isPresented: $showDeleteAlert) {
                 Alert(
@@ -126,6 +157,12 @@ struct LotteryView: View {
             }
             .sheet(item: $showEditLottery) { lottery in
                 EditLotteryView(lottery: lottery, rounds: rounds, onSave: fetchLotteries)
+            }
+            
+            .sheet(isPresented: $showEvidenceSheet) {
+                if let selected = selectedLotteryForEvidence {
+                    EvidenceView(lottery: selected, onUpdated: fetchLotteries)
+                }
             }
         }
     }
@@ -145,10 +182,12 @@ struct LotteryView: View {
         guard let url = URL(string: "\(BASE_URL)/lottery/") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
         if let token = UserDefaults.standard.string(forKey: "accessToken") {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        
         URLSession.shared.dataTask(with: request) { data, _, _ in
             DispatchQueue.main.async {
                 if let data = data, var decoded = try? JSONDecoder().decode([Lottery].self, from: data) {
@@ -167,17 +206,22 @@ struct LotteryView: View {
         guard let url = URL(string: "\(BASE_URL)/lottery/check") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        
         if let token = UserDefaults.standard.string(forKey: "accessToken") {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        
         URLSession.shared.dataTask(with: request) { data, _, _ in
             DispatchQueue.main.async {
-                if let data = data, let decoded = try? JSONDecoder().decode([Lottery].self, from: data) {
+                if let data = data,
+                   let decoded = try? JSONDecoder().decode([Lottery].self, from: data) {
+                    
                     for updated in decoded {
                         if let index = lotteries.firstIndex(where: { $0.id == updated.id }) {
                             lotteries[index].status = updated.status
                         }
                     }
+                    
                     if decoded.contains(where: { $0.status.hasPrefix("ถูกรางวัล") }) {
                         showCongrats = true
                     }
@@ -195,9 +239,11 @@ struct LotteryView: View {
         guard let url = URL(string: "\(BASE_URL)/lottery/\(lottery.id)") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
+        
         if let token = UserDefaults.standard.string(forKey: "accessToken") {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        
         URLSession.shared.dataTask(with: request) { _, _, _ in
             DispatchQueue.main.async { fetchLotteries() }
         }.resume()
@@ -206,7 +252,9 @@ struct LotteryView: View {
     func convertToBuddhistYear(_ round: String) -> String {
         let components = round.split(separator: "/")
         guard components.count == 3, let year = Int(components[2]) else { return round }
-        if year < 2500 { return "\(components[0])/\(components[1])/\(year + 543)" }
+        if year < 2500 {
+            return "\(components[0])/\(components[1])/\(year + 543)"
+        }
         return round
     }
 }
