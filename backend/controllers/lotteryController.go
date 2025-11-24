@@ -140,28 +140,10 @@ func DeleteLotteryImage(c *gin.Context) {
 	if lot.ImageURL != "" {
 		s3Key := extractKeyFromURL(lot.ImageURL)
 
-		_, err = config.S3Client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		_, _ = config.S3Client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
 			Bucket: aws.String(config.S3Bucket),
 			Key:    aws.String(s3Key),
 		})
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "Failed to delete image from S3",
-				"details": err.Error(),
-			})
-			return
-		}
-
-		waiter := s3.NewObjectNotExistsWaiter(config.S3Client)
-		err = waiter.Wait(context.TODO(), &s3.HeadObjectInput{
-			Bucket: aws.String(config.S3Bucket),
-			Key:    aws.String(s3Key),
-		}, 10*time.Second)
-
-		if err != nil {
-			fmt.Println("Warning: S3 still processing deletion:", err)
-		}
 	}
 
 	update := bson.M{
@@ -174,7 +156,7 @@ func DeleteLotteryImage(c *gin.Context) {
 		update)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update lottery"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete image"})
 		return
 	}
 
